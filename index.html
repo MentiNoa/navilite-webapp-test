@@ -144,8 +144,8 @@
 
     #firmaVersione {
       position: fixed;
-      bottom: 0;
-      left: 0;
+      bottom: 8px;
+      left: 8px;
       margin: 8px;
       background: rgba(255, 255, 255, 0.8);
       padding: 2px 6px;
@@ -196,17 +196,17 @@
       <button id="clearRouteBtn" class="warn">Annulla</button>
     </div>
 
-    <button id="installBtn">ðŸ“² Installa App</button>
+    <button id="installBtn">?? Installa App</button>
 
     <div id="etaBox">Calcolo percorso...</div>
   </div>
 
-  <div id="firmaVersione">Â© 2025 - v<span id="versionLabel"></span></div>
+  <div id="firmaVersione">© 2025 - v<span id="versionLabel"></span></div>
 
   <script>
     const APP_VERSION = '1.0';
     document.getElementById('versionLabel').textContent = APP_VERSION;
-    console.log(`NaviLite - versione ${APP_VERSION} - Â© SM`);
+    console.log(`NaviLite - versione ${APP_VERSION} - © SM`);
 
     // Script del bottone installa app
     let deferredPrompt;
@@ -241,7 +241,7 @@
     window.addEventListener('load', riallineaFirma);
     window.addEventListener('resize', riallineaFirma);
   </script>
-  </script>
+  
 
   <script>
     // --- App state ---
@@ -394,70 +394,95 @@
 
     // --- Ricerca (Nominatim) ---
     function performSearch() {
-      const query = document.getElementById('searchInput').value.trim();
-      const resultsList = document.getElementById('resultsList');
-      resultsList.innerHTML = '';
-      resultsList.style.display = 'none';
-      if (!query) return;
+  const query = document.getElementById('searchInput').value.trim();
+  const resultsList = document.getElementById('resultsList');
+  resultsList.innerHTML = '';
+  resultsList.style.display = 'none';
+  if (!query) return;
 
-      const params = new URLSearchParams({
-        format: 'json',
-        q: query,
-        addressdetails: '1',
-        limit: '8',
-        'accept-language': 'it',
-        countrycodes: 'it',
-        // Nominatim viewbox: left,top,right,bottom (Sardegna approx)
-        viewbox: '8.1,41.4,9.8,38.8',
-        bounded: '1'
+  const params = new URLSearchParams({
+    format: 'json',
+    q: query,
+    addressdetails: '1',
+    limit: '8',
+    'accept-language': 'it',
+    countrycodes: 'it',
+    viewbox: '8.1,41.4,9.8,38.8',
+    bounded: '1'
+  });
+
+  fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+    headers: { 'Accept': 'application/json' }
+  })
+    .then(res => res.json())
+    .then(results => {
+      if (!Array.isArray(results) || results.length === 0) {
+        resultsList.style.display = 'block';
+        const empty = document.createElement('div');
+        empty.className = 'result-item';
+        empty.textContent = 'Nessun risultato';
+        resultsList.appendChild(empty);
+        return;
+      }
+
+      // Individua il comune nella query
+      const queryLower = query.toLowerCase();
+      let commonMatches = [];
+      let others = [];
+
+      results.forEach(place => {
+        const lng = parseFloat(place.lon);
+        const lat = parseFloat(place.lat);
+        const distText = app.startPoint
+          ? getReadableDistance(app.startPoint, [lng, lat])
+          : '—';
+
+        const item = document.createElement('div');
+        item.className = 'result-item';
+        item.innerHTML = `<strong>${place.display_name}</strong><br><small>Distanza: ${distText}</small>`;
+        item.addEventListener('click', () => {
+          app.endPoint = [lng, lat];
+          app.navigationActive = false;
+          app.routeFittedOnce = false;
+          app.map.flyTo({ center: app.endPoint, zoom: 15 });
+          if (app.searchMarker) app.searchMarker.remove();
+          app.searchMarker = new maplibregl.Marker({ color: '#00aa00' })
+            .setLngLat(app.endPoint)
+            .setPopup(new maplibregl.Popup().setText('Destinazione'))
+            .addTo(app.map);
+          resultsList.style.display = 'none';
+          document.getElementById('searchInput').blur();
+        });
+
+        const comune = place.address?.town ||
+                       place.address?.city ||
+                       place.address?.village ||
+                       place.address?.municipality ||
+                       '';
+        if (comune && queryLower.includes(comune.toLowerCase())) {
+          commonMatches.push({ item, lng, lat });
+        } else {
+          others.push({ item, lng, lat });
+        }
       });
 
-      fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
-        headers: { 'Accept': 'application/json' }
-      })
-        .then(res => res.json())
-        .then(results => {
-          if (!Array.isArray(results) || results.length === 0) {
-            resultsList.style.display = 'block';
-            const empty = document.createElement('div');
-            empty.className = 'result-item';
-            empty.textContent = 'Nessun risultato';
-            resultsList.appendChild(empty);
-            return;
-          }
+      // Ordina per distanza in ogni gruppo
+      const sortByDist = arr => {
+        if (!app.startPoint) return arr;
+        return arr.sort((a, b) => {
+          const da = Math.hypot(a.lng - app.startPoint[0], a.lat - app.startPoint[1]);
+          const db = Math.hypot(b.lng - app.startPoint[0], b.lat - app.startPoint[1]);
+          return da - db;
+        });
+      };
 
-          resultsList.style.display = 'block';
-          results.forEach(place => {
-            const lng = parseFloat(place.lon);
-            const lat = parseFloat(place.lat);
-            const distText = app.startPoint ? getReadableDistance(app.startPoint, [lng, lat]) : 'â€”';
+      sortByDist(commonMatches).forEach(obj => resultsList.appendChild(obj.item));
+      sortByDist(others).forEach(obj => resultsList.appendChild(obj.item));
 
-            const item = document.createElement('div');
-            item.className = 'result-item';
-            item.innerHTML = `<strong>${place.display_name}</strong><br><small>Distanza: ${distText}</small>`;
-
-            item.addEventListener('click', () => {
-              app.endPoint = [lng, lat];
-              app.navigationActive = false; // parte quando premi "Vai a destinazione"
-              app.routeFittedOnce = false;
-
-              app.map.flyTo({ center: app.endPoint, zoom: 15 });
-
-              if (app.searchMarker) app.searchMarker.remove();
-              app.searchMarker = new maplibregl.Marker({ color: '#00aa00' })
-                .setLngLat(app.endPoint)
-                .setPopup(new maplibregl.Popup().setText('Destinazione'))
-                .addTo(app.map);
-
-              resultsList.style.display = 'none';
-              document.getElementById('searchInput').blur();
-            });
-
-            resultsList.appendChild(item);
-          });
-        })
-        .catch(err => console.error('Errore ricerca:', err));
-    }
+      resultsList.style.display = 'block';
+    })
+    .catch(err => console.error('Errore ricerca:', err));
+}
 
     let searchDebounce;
     document.getElementById('searchInput').addEventListener('input', () => {
@@ -605,7 +630,6 @@
 
     });
 
-
     document.getElementById('clearRouteBtn').addEventListener('click', () => {
       clearRoute();
       disattivaWakeLock();
@@ -668,7 +692,7 @@
         .catch(err => console.error('Errore nel caricamento confini Villasor:', err));
     }
 
-    //Aggiungiamo i confini quando la mappa Ã¨ pronta
+    //Aggiungiamo i confini quando la mappa è pronta
     app.map.on('load', () => {
       addVillasorBorders();
 
@@ -727,7 +751,7 @@
     app.map.on('touchmove', onPressMove);
     app.map.on('touchend', onPressEnd);
 
-    // Se parte un drag, annulla il longâ€‘press
+    // Se parte un drag, annulla il long-press
     app.map.on('dragstart', () => {
       pressMoved = true;
       clearTimeout(pressTimer);
@@ -737,7 +761,7 @@
     function setDestinationFromLongPress(coords) {
       // Imposta destinazione
       app.endPoint = coords;
-      app.navigationActive = false; // la rotta partirÃ  solo con "Vai a destinazione"
+      app.navigationActive = false; // la rotta partirà solo con "Vai a destinazione"
       if (app.searchMarker) app.searchMarker.remove();
       app.searchMarker = new maplibregl.Marker({ color: '#00aa00' })
         .setLngLat(app.endPoint)
