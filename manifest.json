@@ -1,0 +1,23 @@
+{
+  "name": "Navigatore GPS test",
+  "short_name": "NaviLite test",
+  "description": "Mappa interattiva con ricerca, navigazione e confini.",
+  "start_url": "/navilite-webapp-test/",
+  "scope": "/navilite-webapp-test/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/navilite-webapp-test/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/navilite-webapp-test/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
