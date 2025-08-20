@@ -176,6 +176,22 @@
     window.addEventListener('load', aggiornaScala);
     window.addEventListener('resize', aggiornaScala);
 
+    // Reverse geocoding per rilevare comune
+    window.addEventListener('load', () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(pos => {
+        const { longitude: lng, latitude: lat } = pos.coords;
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=it`)
+          .then(res => res.json())
+          .then(data => {
+            app.currentTown = data.address?.town || data.address?.city || data.address?.village || '';
+            console.log('Comune rilevato:', app.currentTown);
+          })
+          .catch(err => console.warn('Reverse geocoding fallito:', err));
+      }, err => console.warn('Geolocalizzazione fallita:', err), { enableHighAccuracy: true, timeout: 8000 });
+    });
+
+
   </script>
 </head>
 
@@ -201,10 +217,10 @@
     <div id="etaBox">Calcolo percorso...</div>
   </div>
 
-  <div id="firmaVersione">� 2025 - v<span id="versionLabel"></span></div>
+  <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0';
+    const APP_VERSION = '1.0.1';
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -412,12 +428,9 @@
       });
 
       const getDistanceMeters = (a, b) => {
-        const R = 6371000;
-        const toRad = d => d * Math.PI / 180;
-        const [lng1, lat1] = a;
-        const [lng2, lat2] = b;
-        const dLat = toRad(lat2 - lat1);
-        const dLng = toRad(lng2 - lng1);
+        const R = 6371000, toRad = d => d * Math.PI / 180;
+        const [lng1, lat1] = a, [lng2, lat2] = b;
+        const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
         const s = Math.sin(dLat / 2) ** 2 +
           Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
           Math.sin(dLng / 2) ** 2;
@@ -438,15 +451,19 @@
             return;
           }
 
+          const currentTown = app.currentTown?.toLowerCase() || '';
           const queryLower = query.toLowerCase();
-          const allResults = results.map(place => {
+
+          const enriched = results.map(place => {
             const lng = parseFloat(place.lon);
             const lat = parseFloat(place.lat);
             const comune = place.address?.town ||
               place.address?.city ||
               place.address?.village ||
               place.address?.municipality || '';
-            const isComuneMatch = comune && queryLower.includes(comune.toLowerCase());
+            const comuneLower = comune.toLowerCase();
+
+            const isComuneMatch = currentTown && comuneLower === currentTown;
             const distMeters = app.startPoint ? getDistanceMeters(app.startPoint, [lng, lat]) : null;
             const distText = distMeters !== null ? getReadableDistance(app.startPoint, [lng, lat]) : '—';
 
@@ -467,11 +484,10 @@
               document.getElementById('searchInput').blur();
             });
 
-            return { item, lng, lat, comune, isComuneMatch, distMeters };
+            return { item, isComuneMatch, distMeters };
           });
 
-          allResults.sort((a, b) => {
-            // Prima i comuni che matchano la query, poi ordinamento per distanza
+          enriched.sort((a, b) => {
             if (a.isComuneMatch && !b.isComuneMatch) return -1;
             if (!a.isComuneMatch && b.isComuneMatch) return 1;
             if (a.distMeters !== null && b.distMeters !== null) {
@@ -480,7 +496,7 @@
             return 0;
           });
 
-          allResults.forEach(obj => resultsList.appendChild(obj.item));
+          enriched.forEach(r => resultsList.appendChild(r.item));
           resultsList.style.display = 'block';
         })
         .catch(err => console.error('Errore ricerca:', err));
