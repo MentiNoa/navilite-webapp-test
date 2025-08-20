@@ -145,7 +145,6 @@
     #firmaVersione {
       position: fixed;
       left: calc(var(--scale-factor) * 1.2vh);
-      bottom: max(2vh, env(safe-area-inset-bottom));
       color: #666;
       background: rgba(255, 255, 255, 0.8);
       padding: calc(var(--scale-factor) * 0.4vh) calc(var(--scale-factor) * 0.8vh);
@@ -154,7 +153,11 @@
     }
   </style>
   <script> function aggiornaScala() {
-      const w = window.innerWidth; const h = window.innerHeight; const diagonalePx = Math.sqrt(w * w + h * h); const dpi = window.devicePixelRatio * 96; const diagonalePollici = diagonalePx / dpi;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const diagonalePx = Math.sqrt(w * w + h * h);
+      const dpi = window.devicePixelRatio * 96;
+      const diagonalePollici = diagonalePx / dpi;
 
       let scaleFactor = diagonalePx / 1000;
       scaleFactor = Math.max(0.8, Math.min(scaleFactor, 2));
@@ -171,6 +174,7 @@
     window.addEventListener('resize', aggiornaScala);
 
   </script>
+</head>
 
 <body>
   <div id="map"></div>
@@ -219,6 +223,21 @@
         });
       }
     });
+
+    function riallineaFirma() {
+      const credits = document.querySelector('.maplibregl-ctrl-attrib');
+      const firma = document.getElementById('firmaVersione');
+
+      if (credits && firma) {
+        const rect = credits.getBoundingClientRect();
+        const offset = window.innerHeight - rect.top;
+        firma.style.bottom = `${offset}px`;
+      }
+    }
+
+    window.addEventListener('load', riallineaFirma);
+    window.addEventListener('resize', riallineaFirma);
+  </script>
   </script>
 
   <script>
@@ -778,7 +797,9 @@
     }
 
   </script>
+
   <script src="/navilite-webapp/sw-register.js"></script>
+
 </body>
 
 </html>
