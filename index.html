@@ -166,7 +166,7 @@
     .dir-arrow {
       width: 100%;
       height: 100%;
-      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green"><path d="M12 2l7 20-7-5-7 5z"/></svg>') center/contain no-repeat;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="red"><path d="M12 2l7 20-7-5-7 5z"/></svg>') center/contain no-repeat;
       transform: rotate(0deg);
       transform-origin: 50% 50%;
     }
@@ -233,7 +233,7 @@
       <button id="followBtn" class="secondary">Segui posizione: Off</button>
       <label id="arrowToggleWrap" class="secondary"
         style="display:flex;align-items:center;gap:6px;padding:calc(var(--scale-factor) * 1vh) calc(var(--scale-factor) * 1.2vh);border-radius:calc(var(--scale-factor) * 1vh);background:#f0f2f5;color:#111;cursor:pointer;">
-        <input type="checkbox" id="arrowToggle" checked style="margin:0;"> &#x1F53C; Freccia
+        <input type="checkbox" id="arrowToggle" checked style="margin:0;"> &#x1F4CD;
       </label>
     </div>
 
@@ -245,7 +245,7 @@
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.13';
+    const APP_VERSION = '1.0.14-tests';
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -292,7 +292,7 @@
       endPoint: null,
       userMarker: null,
       searchMarker: null,
-      followMode: false,
+      followMode: true,
       watchId: null,
       lastRouteUpdate: 0,
       routeFittedOnce: false,
@@ -359,6 +359,13 @@
       box.textContent = `Arrivo stimato: ${text} (${getReadableDistance(app.startPoint, app.endPoint)})`;
       box.style.display = 'block';
     }
+
+    function updateFollowButton() {
+      const btn = document.getElementById('followBtn');
+      if (!btn) return;
+      btn.textContent = app.followMode ? "Segui posizione: ON" : "Segui posizione: OFF";
+    }
+
 
     // --- Heading helpers ---
     // Offset per allineare l'SVG alla direzione "Nord" del sensore.
@@ -436,6 +443,47 @@
 
 
     // --- Geolocalizzazione ---
+    // Stato iniziale
+    app.followMode = true;
+    app.lastHeading = 0;
+
+    // Pulsante "Segui posizione"
+    document.getElementById('followBtn').addEventListener('click', toggleFollow);
+    updateFollowButton(); // inizializza stato pulsante
+
+    // Disattiva follow se l’utente muove la mappa manualmente
+    app.map.on('dragstart', () => {
+      if (app.followMode) {
+        app.followMode = false;
+        updateFollowButton();
+      }
+    });
+
+    // Toggle follow mode
+    function toggleFollow() {
+      app.followMode = !app.followMode;
+      updateFollowButton();
+
+      if (app.followMode && app.startPoint) {
+        app.map.easeTo({
+          center: app.startPoint,
+          zoom: Math.max(app.map.getZoom(), 15),
+          bearing: (typeof app.lastHeading === 'number' ? app.lastHeading : app.map.getBearing()),
+          pitch: 45,
+          duration: 800,
+          essential: true
+        });
+      }
+    }
+
+    // Aggiorna stato pulsante
+    function updateFollowButton() {
+      const btn = document.getElementById('followBtn');
+      if (!btn) return;
+      btn.textContent = app.followMode ? "Segui posizione: ON" : "Segui posizione: OFF";
+    }
+
+    // Aggiorna posizione utente una tantum
     function updateUserPosition(centerMap = true) {
       if (!navigator.geolocation) return;
 
@@ -443,26 +491,27 @@
         const { longitude: lng, latitude: lat, heading } = pos.coords;
         app.startPoint = [lng, lat];
 
-        // aggiorna o crea il marker (freccia fissa a nord)
+        if (typeof heading === 'number') app.lastHeading = heading;
+
         setUserMarker(lng, lat);
 
-        // centra la mappa e aggiorna il bearing se richiesto
         if (centerMap || app.followMode) {
           app.map.easeTo({
             center: app.startPoint,
             zoom: Math.max(app.map.getZoom(), 15),
-            bearing: (typeof heading === 'number' ? heading : app.map.getBearing()),
+            bearing: (typeof app.lastHeading === 'number' ? app.lastHeading : app.map.getBearing()),
             pitch: 45,
             duration: 800,
             essential: true
           });
         }
-      },
-        err => console.warn('Geolocalizzazione fallita:', err),
-        { enableHighAccuracy: true, timeout: 8000 });
+      }, err => console.warn('Geolocalizzazione fallita:', err), {
+        enableHighAccuracy: true,
+        timeout: 8000
+      });
     }
 
-
+    // Live tracking continuo
     function startLiveTracking() {
       if (!navigator.geolocation) return;
       if (app.watchId) navigator.geolocation.clearWatch(app.watchId);
@@ -471,14 +520,15 @@
         const { longitude: lng, latitude: lat, heading } = pos.coords;
         app.startPoint = [lng, lat];
 
-        setUserMarker(lng, lat);
+        if (typeof heading === 'number') app.lastHeading = heading;
 
+        setUserMarker(lng, lat);
 
         if (app.followMode) {
           app.map.easeTo({
             center: app.startPoint,
             zoom: Math.max(app.map.getZoom(), 15),
-            bearing: (typeof heading === 'number' ? heading : app.map.getBearing()),
+            bearing: (typeof app.lastHeading === 'number' ? app.lastHeading : app.map.getBearing()),
             pitch: 45,
             duration: 800,
             essential: true
@@ -580,7 +630,7 @@
               app.endPoint = [plng, plat];
               app.navigationActive = false;
               app.routeFittedOnce = false;
-              app.map.flyTo({ center: app.endPoint, zoom: 15 });
+              app.map.flyTo({ center: app.endPoint, zoom: 16 });
               if (app.searchMarker) app.searchMarker.remove();
               app.searchMarker = new maplibregl.Marker({ color: '#00aa00' })
                 .setLngLat(app.endPoint)
@@ -730,19 +780,6 @@
       }
     }
 
-    // --- Follow toggle unificato ---
-    function toggleFollow() {
-      app.followMode = !app.followMode;
-      const btn = document.getElementById('followBtn');
-      btn.textContent = `Segui posizione: ${app.followMode ? 'On' : 'Off'}`;
-      btn.classList.toggle('active', app.followMode);
-
-      if (app.followMode) {
-        updateUserPosition(true);
-        startLiveTracking();
-      }
-    }
-
     // --- Event wiring ---
     document.getElementById('goToSearchBtn').addEventListener('click', () => {
       if (!app.startPoint || !app.endPoint) {
@@ -761,7 +798,8 @@
       clearRoute();
       disattivaWakeLock();
     });
-    document.getElementById('followBtn').addEventListener('click', toggleFollow);
+
+
 
     document.addEventListener('click', (e) => {
       const resultsList = document.getElementById('resultsList');
