@@ -450,7 +450,6 @@
 
     function eseguiRicerca(query) {
       const resultsList = document.getElementById('resultsList');
-
       const params = new URLSearchParams({
         format: 'json',
         q: query,
@@ -461,9 +460,7 @@
         bounded: '0'
       });
 
-      fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-        headers: { 'Accept': 'application/json' }
-      })
+      fetch(`https://nominatim.openstreetmap.org/search?${params}`, { headers: { 'Accept': 'application/json' } })
         .then(res => res.json())
         .then(results => {
           resultsList.innerHTML = '';
@@ -511,21 +508,19 @@
             };
           });
 
-          // Logica aggiornata per distinguere tra via e comune/città
           const contieneComune = results.some(r => {
             const addr = r.address || {};
-            if (
-              (addr.town && addr.town.toLowerCase().includes(queryLower)) ||
+            return (addr.town && addr.town.toLowerCase().includes(queryLower)) ||
               (addr.city && addr.city.toLowerCase().includes(queryLower)) ||
-              (addr.village && addr.village.toLowerCase().includes(queryLower))
-            ) {
-              return true;
-            }
-            return false;
+              (addr.village && addr.village.toLowerCase().includes(queryLower));
           });
 
-          // Applica il filtro solo se NON è stato trovato un comune corrispondente
-          if (!contieneComune && currentCoords) {
+          const contieneVia = results.some(r => {
+            const addr = r.address || {};
+            return addr.road && addr.road.toLowerCase().includes(queryLower);
+          });
+
+          if (!contieneComune && !contieneVia && currentCoords) {
             enriched = enriched.filter(r => r.distMeters !== null && r.distMeters <= 20000);
           }
 
