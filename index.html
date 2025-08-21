@@ -225,7 +225,7 @@
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.7';
+    const APP_VERSION = '1.0.8';
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -421,102 +421,100 @@
 
     // --- Ricerca (Nominatim) ---
     function performSearch() {
-      const query = document.getElementById('searchInput').value.trim();
-      const resultsList = document.getElementById('resultsList');
-      resultsList.innerHTML = '';
-      resultsList.style.display = 'none';
-      if (!query) return;
+  const query = document.getElementById('searchInput').value.trim();
+  const resultsList = document.getElementById('resultsList');
+  resultsList.innerHTML = '';
+  resultsList.style.display = 'none';
+  if (!query) return;
 
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(pos => {
-          const { longitude: lng, latitude: lat } = pos.coords;
-          app.currentCoords = [lng, lat];
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { longitude: lng, latitude: lat } = pos.coords;
+      app.currentCoords = [lng, lat];
 
-          fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=it`)
-            .then(res => res.json())
-            .then(() => eseguiRicerca(query))
-            .catch(err => {
-              console.warn('Reverse geocoding fallito:', err);
-              eseguiRicerca(query);
-            });
-        }, err => {
-          console.warn('Geolocalizzazione non riuscita, uso coords precedenti:', err);
+      fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=it`)
+        .then(res => res.json())
+        .then(() => eseguiRicerca(query))
+        .catch(err => {
+          console.warn('Reverse geocoding fallito:', err);
           eseguiRicerca(query);
-        }, { enableHighAccuracy: true, timeout: 8000 });
-      } else {
-        eseguiRicerca(query);
+        });
+    }, err => {
+      console.warn('Geolocalizzazione non riuscita, uso coords precedenti:', err);
+      eseguiRicerca(query);
+    }, { enableHighAccuracy: true, timeout: 8000 });
+  } else {
+    eseguiRicerca(query);
+  }
+}
+
+function eseguiRicerca(query) {
+  const resultsList = document.getElementById('resultsList');
+
+  const params = new URLSearchParams({
+    format: 'json',
+    q: query,
+    addressdetails: '1',
+    limit: '20',
+    'accept-language': 'it',
+    countrycodes: 'it',
+    bounded: '0'
+  });
+
+  fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+    headers: { 'Accept': 'application/json' }
+  })
+    .then(res => res.json())
+    .then(results => {
+      if (!Array.isArray(results) || results.length === 0) {
+        resultsList.style.display = 'block';
+        const empty = document.createElement('div');
+        empty.className = 'result-item';
+        empty.textContent = 'Nessun risultato';
+        resultsList.appendChild(empty);
+        return;
       }
-    }
 
-    function eseguiRicerca(query) {
-      const resultsList = document.getElementById('resultsList');
+      const currentCoords = app.currentCoords;
 
-      const params = new URLSearchParams({
-        format: 'json',
-        q: query,
-        addressdetails: '1',
-        limit: '8',
-        'accept-language': 'it',
-        countrycodes: 'it',
-        viewbox: '8.1,41.4,9.8,38.8',
-        bounded: '1'
+      const enriched = results.map(place => {
+        const lng = parseFloat(place.lon);
+        const lat = parseFloat(place.lat);
+        const distMeters = currentCoords ? getDistanceMeters(currentCoords, [lng, lat]) : null;
+        const distText = distMeters !== null ? getReadableDistance(currentCoords, [lng, lat]) : '—';
+
+        const item = document.createElement('div');
+        item.className = 'result-item';
+        item.innerHTML = `<strong>${place.display_name}</strong><br><small>Distanza: ${distText}</small>`;
+        item.addEventListener('click', () => {
+          app.endPoint = [lng, lat];
+          app.navigationActive = false;
+          app.routeFittedOnce = false;
+          app.map.flyTo({ center: app.endPoint, zoom: 15 });
+          if (app.searchMarker) app.searchMarker.remove();
+          app.searchMarker = new maplibregl.Marker({ color: '#00aa00' })
+            .setLngLat(app.endPoint)
+            .setPopup(new maplibregl.Popup().setText('Destinazione'))
+            .addTo(app.map);
+          resultsList.style.display = 'none';
+          document.getElementById('searchInput').blur();
+        });
+
+        return { item, distMeters };
       });
 
-      fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-        headers: { 'Accept': 'application/json' }
-      })
-        .then(res => res.json())
-        .then(results => {
-          if (!Array.isArray(results) || results.length === 0) {
-            resultsList.style.display = 'block';
-            const empty = document.createElement('div');
-            empty.className = 'result-item';
-            empty.textContent = 'Nessun risultato';
-            resultsList.appendChild(empty);
-            return;
-          }
+      enriched.sort((a, b) => {
+        if (a.distMeters !== null && b.distMeters !== null) {
+          return a.distMeters - b.distMeters;
+        }
+        return 0;
+      });
 
-          const currentCoords = app.currentCoords;
-
-          const enriched = results.map(place => {
-            const lng = parseFloat(place.lon);
-            const lat = parseFloat(place.lat);
-            const distMeters = currentCoords ? getDistanceMeters(currentCoords, [lng, lat]) : null;
-            const distText = distMeters !== null ? getReadableDistance(currentCoords, [lng, lat]) : '—';
-
-            const item = document.createElement('div');
-            item.className = 'result-item';
-            item.innerHTML = `<strong>${place.display_name}</strong><br><small>Distanza: ${distText}</small>`;
-            item.addEventListener('click', () => {
-              app.endPoint = [lng, lat];
-              app.navigationActive = false;
-              app.routeFittedOnce = false;
-              app.map.flyTo({ center: app.endPoint, zoom: 15 });
-              if (app.searchMarker) app.searchMarker.remove();
-              app.searchMarker = new maplibregl.Marker({ color: '#00aa00' })
-                .setLngLat(app.endPoint)
-                .setPopup(new maplibregl.Popup().setText('Destinazione'))
-                .addTo(app.map);
-              resultsList.style.display = 'none';
-              document.getElementById('searchInput').blur();
-            });
-
-            return { item, distMeters };
-          });
-
-          // Ordinamento SOLO per distanza
-          enriched.sort((a, b) => {
-            if (a.distMeters !== null && b.distMeters !== null) {
-              return a.distMeters - b.distMeters;
-            }
-            return 0;
-          });
-
-          enriched.forEach(r => resultsList.appendChild(r.item));
-          resultsList.style.display = 'block';
-        })
-        .catch(err => console.error('Errore ricerca:', err));
-    }
+      enriched.forEach(r => resultsList.appendChild(r.item));
+      resultsList.style.display = 'block';
+    })
+    .catch(err => console.error('Errore ricerca:', err));
+}
 
     let searchDebounce;
     document.getElementById('searchInput').addEventListener('input', () => {
