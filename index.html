@@ -225,11 +225,7 @@
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-<<<<<<< HEAD
-    const APP_VERSION = '1.0.4';
-=======
-    const APP_VERSION = '1.0.4';
->>>>>>> 1d8817f54aa55149e038229e4f7d14502a813b18
+    const APP_VERSION = '1.0.5';
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -431,7 +427,6 @@
       resultsList.style.display = 'none';
       if (!query) return;
 
-<<<<<<< HEAD
       // Aggiorna posizione e comune
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
@@ -462,27 +457,6 @@
     function eseguiRicerca(query) {
       const resultsList = document.getElementById('resultsList');
 
-=======
-      // 🔄 Aggiorna la posizione attuale prima di procedere
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(pos => {
-          const { longitude: lng, latitude: lat } = pos.coords;
-          app.currentCoords = [lng, lat];
-          console.log('Posizione aggiornata per ricerca:', app.currentCoords);
-          eseguiRicerca(query); // avvia fetch con coords fresche
-        }, err => {
-          console.warn('Geo non riuscita, uso coords precedenti:', err);
-          eseguiRicerca(query); // continua comunque
-        }, { enableHighAccuracy: true, timeout: 8000 });
-      } else {
-        eseguiRicerca(query); // fallback se non disponibile
-      }
-    }
-
-    function eseguiRicerca(query) {
-      const resultsList = document.getElementById('resultsList');
-
->>>>>>> 1d8817f54aa55149e038229e4f7d14502a813b18
       const params = new URLSearchParams({
         format: 'json',
         q: query,
@@ -557,12 +531,6 @@
         .catch(err => console.error('Errore ricerca:', err));
     }
 
-
-<<<<<<< HEAD
-=======
-
-
->>>>>>> 1d8817f54aa55149e038229e4f7d14502a813b18
     let searchDebounce;
     document.getElementById('searchInput').addEventListener('input', () => {
       clearTimeout(searchDebounce);
