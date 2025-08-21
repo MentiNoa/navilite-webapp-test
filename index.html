@@ -154,23 +154,22 @@
       color: #666;
       z-index: 999;
     }
-    
+
     /* Contenitore del marker (gestito da MapLibre: non ruotarlo mai) */
     .dir-arrow-container {
       width: 28px;
       height: 28px;
     }
-    
+
     /* Marker a freccia (sostituisce il pallino rosso quando attivo) */
     /* La freccia vera e propria: ruotiamo SOLO questo nodo interno */
-.dir-arrow {
-  width: 100%;
-  height: 100%;
-  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green"><path d="M12 2l7 20-7-5-7 5z"/></svg>') center/contain no-repeat;
-  transform: rotate(0deg);
-  transform-origin: 50% 50%;
-}
-
+    .dir-arrow {
+      width: 100%;
+      height: 100%;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green"><path d="M12 2l7 20-7-5-7 5z"/></svg>') center/contain no-repeat;
+      transform: rotate(0deg);
+      transform-origin: 50% 50%;
+    }
   </style>
   <script> function aggiornaScala() {
       const w = window.innerWidth;
@@ -232,8 +231,7 @@
       <button id="goToSearchBtn">Vai a destinazione</button>
       <button id="clearRouteBtn" class="warn">Annulla</button>
       <button id="followBtn" class="secondary">Segui posizione: Off</button>
-      <label id="arrowToggleWrap" 
-        class="secondary" 
+      <label id="arrowToggleWrap" class="secondary"
         style="display:flex;align-items:center;gap:6px;padding:calc(var(--scale-factor) * 1vh) calc(var(--scale-factor) * 1.2vh);border-radius:calc(var(--scale-factor) * 1vh);background:#f0f2f5;color:#111;cursor:pointer;">
         <input type="checkbox" id="arrowToggle" checked style="margin:0;"> &#x1F53C; Freccia
       </label>
@@ -247,7 +245,7 @@
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.12';
+    const APP_VERSION = '1.0.13';
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -322,7 +320,7 @@
       ]
     };
 
-    
+
     // --- Map init ---
     app.map = new maplibregl.Map({
       container: 'map',
@@ -368,59 +366,59 @@
       for (const [x, y] of coords) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
       app.map.fitBounds([[minX, minY], [maxX, maxY]], { padding: 60, duration: 700 });
     }
-    
+
     // helper freccia direzioni
     function setUserMarker(lng, lat, heading) {
-  app.startPoint = [lng, lat];
-  if (typeof heading === 'number' && !Number.isNaN(heading)) {
-    app.lastHeading = heading;
-  }
+      app.startPoint = [lng, lat];
+      if (typeof heading === 'number' && !Number.isNaN(heading)) {
+        app.lastHeading = heading;
+      }
 
-  const wantArrow = app.arrowEnabled;
+      const wantArrow = app.arrowEnabled;
 
-  // Se il tipo di marker non combacia con il toggle, ricrealo
-  if (!app.userMarker || app.userMarker.__isArrow !== wantArrow) {
-    if (app.userMarker) { app.userMarker.remove(); app.userMarker = null; }
-    if (app.startPoint) setUserMarker(app.startPoint[0], app.startPoint[1], app.lastHeading);
+      // Crea/ricrea il marker se non esiste o se il tipo non combacia col toggle
+      if (!app.userMarker || app.userMarker.__isArrow !== wantArrow) {
+        if (app.userMarker) { app.userMarker.remove(); app.userMarker = null; }
 
-    if (wantArrow) {
-      // Contenitore che MapLibre trasla (non lo ruotiamo)
-      const container = document.createElement('div');
-      container.className = 'dir-arrow-container';
+        if (wantArrow) {
+          // Contenitore (MapLibre lo trasla ma NON lo ruotiamo)
+          const container = document.createElement('div');
+          container.className = 'dir-arrow-container';
 
-      // Figlio interno che ruotiamo noi
-      const inner = document.createElement('div');
-      inner.className = 'dir-arrow';
-      container.appendChild(inner);
+          // Figlio interno che ruotiamo noi
+          const inner = document.createElement('div');
+          inner.className = 'dir-arrow';
+          container.appendChild(inner);
 
-      app.userMarker = new maplibregl.Marker({ element: container })
-        .setLngLat(app.startPoint)
-        .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
-        .addTo(app.map);
-      app.userMarker.__arrowInner = inner; // riferimento comodo per aggiornare la rotazione
-      app.userMarker.__isArrow = true;
-      
-    } else {
-      app.userMarker = new maplibregl.Marker({ color: '#d70000' })
-        .setLngLat(app.startPoint)
-        .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
-        .addTo(app.map);
+          app.userMarker = new maplibregl.Marker({ element: container })
+            .setLngLat(app.startPoint)
+            .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
+            .addTo(app.map);
 
-      app.userMarker.__isArrow = false;
-      app.userMarker.__arrowInner = null;
+          app.userMarker.__arrowInner = inner;
+          app.userMarker.__isArrow = true;
+
+        } else {
+          app.userMarker = new maplibregl.Marker({ color: '#d70000' })
+            .setLngLat(app.startPoint)
+            .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
+            .addTo(app.map);
+
+          app.userMarker.__arrowInner = null;
+          app.userMarker.__isArrow = false;
+        }
+
+      } else {
+        // Marker già del tipo giusto → aggiorna solo la posizione
+        app.userMarker.setLngLat(app.startPoint);
+      }
+
+      // Se freccia attiva e ho heading valido → ruota SOLO il nodo interno
+      if (wantArrow && app.userMarker && typeof app.lastHeading === 'number') {
+        const inner = app.userMarker.__arrowInner || app.userMarker.getElement().querySelector('.dir-arrow');
+        if (inner) inner.style.transform = `rotate(${app.lastHeading}deg)`;
+      }
     }
-  } else {
-    // Marker già del tipo giusto: aggiorna solo la posizione
-    app.userMarker.setLngLat(app.startPoint);
-  }
-
-  // Applica la rotazione SOLO al nodo interno, mai al contenitore
-  if (wantArrow && app.userMarker && typeof app.lastHeading === 'number') {
-    const inner = app.userMarker.__arrowInner || app.userMarker.getElement().querySelector('.dir-arrow');
-    if (inner) inner.style.transform = `rotate(${app.lastHeading}deg)`;
-  }
-}
-
 
     // --- Geolocalizzazione ---
     function updateUserPosition(centerMap = true) {
@@ -428,7 +426,7 @@
       navigator.geolocation.getCurrentPosition(pos => {
         const { longitude: lng, latitude: lat, heading } = pos.coords;
         app.startPoint = [lng, lat];
-        
+
         setUserMarker(lng, lat, heading);
 
         if (centerMap || app.followMode) {
@@ -753,24 +751,24 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') document.getElementById('resultsList').style.display = 'none';
     });
-    
+
     const arrowToggle = document.getElementById('arrowToggle');
-if (arrowToggle) {
-  arrowToggle.checked = true;          // ON di default
-  app.arrowEnabled = true;
+    if (arrowToggle) {
+      arrowToggle.checked = true;          // ON di default
+      app.arrowEnabled = true;
 
-  arrowToggle.addEventListener('change', (e) => {
-    app.arrowEnabled = e.target.checked;
-    // Ricrea subito il marker con il tipo corretto
-    if (app.userMarker) { app.userMarker.remove(); app.userMarker = null; }
-    if (app.startPoint) {
-      const [lng, lat] = app.startPoint;
-      setUserMarker(lng, lat, app.lastHeading);
+      arrowToggle.addEventListener('change', (e) => {
+        app.arrowEnabled = e.target.checked;
+        // Ricrea subito il marker con il tipo corretto
+        if (app.userMarker) { app.userMarker.remove(); app.userMarker = null; }
+        if (app.startPoint) {
+          const [lng, lat] = app.startPoint;
+          setUserMarker(lng, lat, app.lastHeading);
+        }
+      });
     }
-  });
-}
 
-    
+
     // --- Confini Villasor ---
     function addVillasorBorders() {
       // URL Overpass API per poligono confini del comune di Villasor

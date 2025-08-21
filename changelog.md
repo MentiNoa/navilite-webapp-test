@@ -2,7 +2,9 @@
 
 Tutte le modifiche rilevanti al progetto saranno documentate qui.
 
-## [1.0.10] - 2025/08/21 
+## [1.0.13] - 2025/08/21 
+### Aggiunto
+- freccia / marker per movimento on-off
 ### Aggiornato
 - ricerca per indirizzo migliorata
 - fix vari
