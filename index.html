@@ -225,7 +225,11 @@
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.2';
+<<<<<<< HEAD
+    const APP_VERSION = '1.0.4';
+=======
+    const APP_VERSION = '1.0.4';
+>>>>>>> 1d8817f54aa55149e038229e4f7d14502a813b18
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -427,6 +431,38 @@
       resultsList.style.display = 'none';
       if (!query) return;
 
+<<<<<<< HEAD
+      // Aggiorna posizione e comune
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          const { longitude: lng, latitude: lat } = pos.coords;
+          app.currentCoords = [lng, lat];
+
+          // Aggiorna anche il comune per coerenza
+          fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=it`)
+            .then(res => res.json())
+            .then(data => {
+              app.currentTown = data.address?.town || data.address?.city || data.address?.village || '';
+              console.log('Comune aggiornato:', app.currentTown);
+              eseguiRicerca(query);
+            })
+            .catch(err => {
+              console.warn('Reverse geocoding fallito:', err);
+              eseguiRicerca(query);
+            });
+        }, err => {
+          console.warn('Geo non riuscita, uso coords precedenti:', err);
+          eseguiRicerca(query);
+        }, { enableHighAccuracy: true, timeout: 8000 });
+      } else {
+        eseguiRicerca(query);
+      }
+    }
+
+    function eseguiRicerca(query) {
+      const resultsList = document.getElementById('resultsList');
+
+=======
       // 🔄 Aggiorna la posizione attuale prima di procedere
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
@@ -446,6 +482,7 @@
     function eseguiRicerca(query) {
       const resultsList = document.getElementById('resultsList');
 
+>>>>>>> 1d8817f54aa55149e038229e4f7d14502a813b18
       const params = new URLSearchParams({
         format: 'json',
         q: query,
@@ -471,15 +508,14 @@
             return;
           }
 
-          const currentTown = app.currentTown?.toLowerCase() || '';
           const currentCoords = app.currentCoords;
+          const currentTown = app.currentTown?.toLowerCase() || '';
 
           const enriched = results.map(place => {
             const lng = parseFloat(place.lon);
             const lat = parseFloat(place.lat);
             const comune = place.address?.town || place.address?.city || place.address?.village || place.address?.municipality || '';
             const comuneLower = comune.toLowerCase();
-
             const isComuneMatch = currentTown && comuneLower === currentTown;
             const distMeters = currentCoords ? getDistanceMeters(currentCoords, [lng, lat]) : null;
             const distText = distMeters !== null ? getReadableDistance(currentCoords, [lng, lat]) : '—';
@@ -501,13 +537,17 @@
               document.getElementById('searchInput').blur();
             });
 
-            return { item, isComuneMatch, distMeters };
+            return { item, distMeters, isComuneMatch };
           });
 
           enriched.sort((a, b) => {
+            // Distanza prima di tutto
+            if (a.distMeters !== null && b.distMeters !== null && a.distMeters !== b.distMeters) {
+              return a.distMeters - b.distMeters;
+            }
+            // Se distanze uguali, preferisci match di comune
             if (a.isComuneMatch && !b.isComuneMatch) return -1;
             if (!a.isComuneMatch && b.isComuneMatch) return 1;
-            if (a.distMeters !== null && b.distMeters !== null) return a.distMeters - b.distMeters;
             return 0;
           });
 
@@ -518,8 +558,11 @@
     }
 
 
+<<<<<<< HEAD
+=======
 
 
+>>>>>>> 1d8817f54aa55149e038229e4f7d14502a813b18
     let searchDebounce;
     document.getElementById('searchInput').addEventListener('input', () => {
       clearTimeout(searchDebounce);
