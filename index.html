@@ -389,26 +389,25 @@
     }
 
     // helper freccia direzioni
-    function setUserMarker(lng, lat, heading) {
+    function setUserMarker(lng, lat) {
       app.startPoint = [lng, lat];
-      if (typeof heading === 'number' && !Number.isNaN(heading)) {
-        app.lastHeading = heading;
-      }
 
       const wantArrow = app.arrowEnabled;
 
-      // Crea/ricrea il marker se non esiste o se il tipo non combacia col toggle
+      // Se il tipo di marker non combacia con il toggle, ricrealo
       if (!app.userMarker || app.userMarker.__isArrow !== wantArrow) {
-        if (app.userMarker) { app.userMarker.remove(); app.userMarker = null; }
+        if (app.userMarker) {
+          app.userMarker.remove();
+          app.userMarker = null;
+        }
 
         if (wantArrow) {
-          // Contenitore (MapLibre lo trasla ma NON lo ruotiamo)
+          // Contenitore della freccia (MapLibre lo trasla, non lo ruotiamo)
           const container = document.createElement('div');
           container.className = 'dir-arrow-container';
 
-          // Figlio interno che ruotiamo noi
           const inner = document.createElement('div');
-          inner.className = 'dir-arrow';
+          inner.className = 'dir-arrow'; // rimane sempre a nord
           container.appendChild(inner);
 
           app.userMarker = new maplibregl.Marker({ element: container })
@@ -418,42 +417,36 @@
 
           app.userMarker.__arrowInner = inner;
           app.userMarker.__isArrow = true;
-
         } else {
           app.userMarker = new maplibregl.Marker({ color: '#d70000' })
             .setLngLat(app.startPoint)
             .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
             .addTo(app.map);
 
-          app.userMarker.__arrowInner = null;
           app.userMarker.__isArrow = false;
+          app.userMarker.__arrowInner = null;
         }
-
       } else {
-        // Marker già del tipo giusto → aggiorna solo la posizione
+        // Marker già esistente: aggiorna solo la posizione
         app.userMarker.setLngLat(app.startPoint);
       }
 
-      // Applica la rotazione SOLO al nodo interno, mai al contenitore
-      if (wantArrow && app.userMarker) {
-        const inner = app.userMarker.__arrowInner || app.userMarker.getElement().querySelector('.dir-arrow');
-        const rot = getEffectiveHeading(app.lastHeading);
-        if (inner != null && rot != null) {
-          inner.style.transform = `rotate(${rot}deg)`;
-        }
-      }
-
+      // Nota: niente rotazione del nodo interno, la freccia punta sempre a nord
     }
+
 
     // --- Geolocalizzazione ---
     function updateUserPosition(centerMap = true) {
       if (!navigator.geolocation) return;
+
       navigator.geolocation.getCurrentPosition(pos => {
         const { longitude: lng, latitude: lat, heading } = pos.coords;
         app.startPoint = [lng, lat];
 
-        setUserMarker(lng, lat, heading);
+        // aggiorna o crea il marker (freccia fissa a nord)
+        setUserMarker(lng, lat);
 
+        // centra la mappa e aggiorna il bearing se richiesto
         if (centerMap || app.followMode) {
           app.map.easeTo({
             center: app.startPoint,
@@ -464,8 +457,11 @@
             essential: true
           });
         }
-      }, err => console.warn('Geolocalizzazione fallita:', err), { enableHighAccuracy: true, timeout: 8000 });
+      },
+        err => console.warn('Geolocalizzazione fallita:', err),
+        { enableHighAccuracy: true, timeout: 8000 });
     }
+
 
     function startLiveTracking() {
       if (!navigator.geolocation) return;
@@ -475,7 +471,7 @@
         const { longitude: lng, latitude: lat, heading } = pos.coords;
         app.startPoint = [lng, lat];
 
-        setUserMarker(lng, lat, heading);
+        setUserMarker(lng, lat);
 
 
         if (app.followMode) {
