@@ -225,7 +225,7 @@
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.8';
+    const APP_VERSION = '1.0.9';
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -511,19 +511,20 @@
             };
           });
 
+          // Logica aggiornata per distinguere tra via e comune/città
           const contieneComune = results.some(r => {
-            if (r.address && r.address.town) {
-              return r.address.town.toLowerCase().includes(queryLower);
-            }
-            if (r.address && r.address.city) {
-              return r.address.city.toLowerCase().includes(queryLower);
-            }
-            if (r.address && r.address.village) {
-              return r.address.village.toLowerCase().includes(queryLower);
+            const addr = r.address || {};
+            if (
+              (addr.town && addr.town.toLowerCase().includes(queryLower)) ||
+              (addr.city && addr.city.toLowerCase().includes(queryLower)) ||
+              (addr.village && addr.village.toLowerCase().includes(queryLower))
+            ) {
+              return true;
             }
             return false;
           });
 
+          // Applica il filtro solo se NON è stato trovato un comune corrispondente
           if (!contieneComune && currentCoords) {
             enriched = enriched.filter(r => r.distMeters !== null && r.distMeters <= 20000);
           }
@@ -544,6 +545,7 @@
         })
         .catch(err => console.error('Errore ricerca:', err));
     }
+
 
     let searchDebounce;
     document.getElementById('searchInput').addEventListener('input', () => {
