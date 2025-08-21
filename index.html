@@ -790,6 +790,11 @@
       app.navigationActive = true;
       requestRoute(app.startPoint, app.endPoint);
 
+
+      // 🔹 Forza segui posizione ON quando parte la navigazione
+      app.followMode = true;
+      updateFollowButton();
+
       if ('wakeLock' in navigator) attivaWakeLock();
 
     });
