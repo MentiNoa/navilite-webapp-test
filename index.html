@@ -508,6 +508,7 @@
             };
           });
 
+          // Controllo se la query è un comune
           const contieneComune = results.some(r => {
             const addr = r.address || {};
             return (addr.town && addr.town.toLowerCase().includes(queryLower)) ||
@@ -515,15 +516,22 @@
               (addr.village && addr.village.toLowerCase().includes(queryLower));
           });
 
+          // Controllo se la query è una via
           const contieneVia = results.some(r => {
             const addr = r.address || {};
             return addr.road && addr.road.toLowerCase().includes(queryLower);
           });
 
-          if (!contieneComune && !contieneVia && currentCoords) {
-            enriched = enriched.filter(r => r.distMeters !== null && r.distMeters <= 20000);
+          // Applica i filtri di distanza in base al tipo di match
+          if (currentCoords) {
+            if (!contieneComune && !contieneVia) {
+              enriched = enriched.filter(r => r.distMeters !== null && r.distMeters <= 20000);
+            } else if (contieneVia && !contieneComune) {
+              enriched = enriched.filter(r => r.distMeters !== null && r.distMeters <= 50000);
+            }
           }
 
+          // Ordina per distanza
           enriched.sort((a, b) => {
             if (a.distMeters !== null && b.distMeters !== null) {
               return a.distMeters - b.distMeters;
@@ -540,7 +548,6 @@
         })
         .catch(err => console.error('Errore ricerca:', err));
     }
-
 
     let searchDebounce;
     document.getElementById('searchInput').addEventListener('input', () => {
