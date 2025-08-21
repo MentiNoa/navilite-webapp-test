@@ -154,6 +154,15 @@
       color: #666;
       z-index: 999;
     }
+
+    /* Marker a freccia (sostituisce il pallino rosso quando attivo) */
+    .dir-arrow {
+      width: 28px;
+      height: 28px;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="green"><path d="M12 2l7 20-7-5-7 5z"/></svg>') center/contain no-repeat;
+      transform: rotate(0deg);
+      transform-origin: 50% 50%;
+    }
   </style>
   <script> function aggiornaScala() {
       const w = window.innerWidth;
@@ -215,6 +224,10 @@
       <button id="goToSearchBtn">Vai a destinazione</button>
       <button id="clearRouteBtn" class="warn">Annulla</button>
       <button id="followBtn" class="secondary">Segui posizione: Off</button>
+      <label id="arrowToggleWrap" class="secondary"
+        style="display:flex;align-items:center;gap:6px;padding:calc(var(--scale-factor) * 1vh) calc(var(--scale-factor) * 1.2vh);border-radius:calc(var(--scale-factor) * 1vh);background:#f0f2f5;color:#111;cursor:pointer;">
+        <input type="checkbox" id="arrowToggle" checked style="margin:0;"> &#x1F53C; Freccia
+      </label>
     </div>
 
     <button id="installBtn">?? Installa App</button>
@@ -225,7 +238,7 @@
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.11';
+    const APP_VERSION = '1.0.12';
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -279,7 +292,9 @@
       navigationActive: false,
       routeSourceId: 'route-src',
       routeLayerId: 'route-lyr',
-      routeFeature: null
+      routeFeature: null,
+      arrowEnabled: true,      // freccia ON di default
+      lastHeading: null       // ricordo ultimo heading
     };
 
     // --- Stile OpenStreetMap standard ---
@@ -297,6 +312,11 @@
         { id: "osm-tiles", type: "raster", source: "osm-tiles", minzoom: 0, maxzoom: 19 }
       ]
     };
+    function createArrowMarker() {
+      const el = document.createElement('div');
+      el.className = 'direction-arrow';
+      return el;
+    }
 
     // --- Map init ---
     app.map = new maplibregl.Map({
@@ -344,6 +364,43 @@
       app.map.fitBounds([[minX, minY], [maxX, maxY]], { padding: 60, duration: 700 });
     }
 
+    // helper freccia direzioni
+    function setUserMarker(lng, lat, heading) {
+      app.startPoint = [lng, lat];
+      if (typeof heading === 'number' && !Number.isNaN(heading)) {
+        app.lastHeading = heading;
+      }
+
+      // Se il tipo di marker non corrisponde allo stato del toggle, ricrealo
+      if (!app.userMarker || app.userMarker.__isArrow !== app.arrowEnabled) {
+        if (app.userMarker) { app.userMarker.remove(); app.userMarker = null; }
+
+        if (app.arrowEnabled) {
+          const el = document.createElement('div');
+          el.className = 'dir-arrow';
+          app.userMarker = new maplibregl.Marker({ element: el })
+            .setLngLat(app.startPoint)
+            .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
+            .addTo(app.map);
+          app.userMarker.__isArrow = true;
+        } else {
+          app.userMarker = new maplibregl.Marker({ color: '#d70000' })
+            .setLngLat(app.startPoint)
+            .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
+            .addTo(app.map);
+          app.userMarker.__isArrow = false;
+        }
+      } else {
+        app.userMarker.setLngLat(app.startPoint);
+      }
+
+      // Ruota la freccia se attiva e ho un heading valido
+      if (app.arrowEnabled && typeof app.lastHeading === 'number' && app.userMarker) {
+        const el = app.userMarker.getElement();
+        if (el) el.style.transform = `rotate(${app.lastHeading}deg)`;
+      }
+    }
+
     // --- Geolocalizzazione ---
     function updateUserPosition(centerMap = true) {
       if (!navigator.geolocation) return;
@@ -351,13 +408,7 @@
         const { longitude: lng, latitude: lat, heading } = pos.coords;
         app.startPoint = [lng, lat];
 
-        if (app.userMarker) app.userMarker.setLngLat(app.startPoint);
-        else {
-          app.userMarker = new maplibregl.Marker({ color: '#d70000' })
-            .setLngLat(app.startPoint)
-            .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
-            .addTo(app.map);
-        }
+        setUserMarker(lng, lat, heading);
 
         if (centerMap || app.followMode) {
           app.map.easeTo({
@@ -380,13 +431,8 @@
         const { longitude: lng, latitude: lat, heading } = pos.coords;
         app.startPoint = [lng, lat];
 
-        if (app.userMarker) app.userMarker.setLngLat(app.startPoint);
-        else {
-          app.userMarker = new maplibregl.Marker({ color: '#d70000' })
-            .setLngLat(app.startPoint)
-            .setPopup(new maplibregl.Popup().setText('Posizione attuale'))
-            .addTo(app.map);
-        }
+        setUserMarker(lng, lat, heading);
+
 
         if (app.followMode) {
           app.map.easeTo({
@@ -686,6 +732,24 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') document.getElementById('resultsList').style.display = 'none';
     });
+
+    const arrowToggle = document.getElementById('arrowToggle');
+    if (arrowToggle) {
+      arrowToggle.checked = true;          // ON di default
+      app.arrowEnabled = true;
+
+      arrowToggle.addEventListener('change', (e) => {
+        app.arrowEnabled = e.target.checked;
+        // Ricrea subito il marker con il tipo corretto
+        if (app.userMarker) { app.userMarker.remove(); app.userMarker = null; }
+        if (app.startPoint) {
+          const [lng, lat] = app.startPoint;
+          setUserMarker(lng, lat, app.lastHeading);
+        }
+      });
+    }
+
+
     // --- Confini Villasor ---
     function addVillasorBorders() {
       // URL Overpass API per poligono confini del comune di Villasor
