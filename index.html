@@ -360,6 +360,27 @@
       box.style.display = 'block';
     }
 
+    // --- Heading helpers ---
+    // Offset per allineare l'SVG alla direzione "Nord" del sensore.
+    // Se vedi la freccia ruotata, prova a cambiare in +90, 0 o 180.
+    const ARROW_OFFSET = -90;
+
+    function normalizeHeading(deg, offset = ARROW_OFFSET) {
+      if (!Number.isFinite(deg)) return null;
+      // porta sempre in [0, 360)
+      return ((deg + offset) % 360 + 360) % 360;
+    }
+
+    // Preferisce il sensore; se manca, usa il bearing della mappa; altrimenti 0.
+    // Restituisce già normalizzato con l'offset.
+    function getEffectiveHeading(rawHeading) {
+      const base = Number.isFinite(rawHeading)
+        ? rawHeading
+        : (app.map ? app.map.getBearing() : 0);
+      return normalizeHeading(base);
+    }
+
+
     function fitRouteBounds(coords) {
       if (!coords?.length) return;
       let minX = coords[0][0], maxX = coords[0][0], minY = coords[0][1], maxY = coords[0][1];
@@ -413,11 +434,15 @@
         app.userMarker.setLngLat(app.startPoint);
       }
 
-      // Se freccia attiva e ho heading valido → ruota SOLO il nodo interno
-      if (wantArrow && app.userMarker && typeof app.lastHeading === 'number') {
+      // Applica la rotazione SOLO al nodo interno, mai al contenitore
+      if (wantArrow && app.userMarker) {
         const inner = app.userMarker.__arrowInner || app.userMarker.getElement().querySelector('.dir-arrow');
-        if (inner) inner.style.transform = `rotate(${app.lastHeading}deg)`;
+        const rot = getEffectiveHeading(app.lastHeading);
+        if (inner != null && rot != null) {
+          inner.style.transform = `rotate(${rot}deg)`;
+        }
       }
+
     }
 
     // --- Geolocalizzazione ---
