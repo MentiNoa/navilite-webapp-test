@@ -2,9 +2,12 @@
 
 Tutte le modifiche rilevanti al progetto saranno documentate qui.
 
-## [1.0.18] - 2025/08/22 
+## [1.0.19] - 2025/08/22 
 ### Aggiunto
 - banner direzioni
+
+### Aggiornato
+- fix interfaccia non centrata 
 
 ### Aggiornato
 - logica della freccia: statica ma la mappa ruota 
