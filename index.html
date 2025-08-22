@@ -8,6 +8,7 @@
   <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/osmtogeojson@3.0.0-beta.5/osmtogeojson.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
   <link rel="manifest" href="/navilite-webapp-test/manifest.json">
   <meta name="theme-color" content="#0f172a">
   <style>
@@ -169,6 +170,36 @@
       background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="red"><path d="M12 2l7 20-7-5-7 5z"/></svg>') center/contain no-repeat;
       transform: rotate(0deg);
       transform-origin: 50% 50%;
+
+      /* Pannello navigazione in basso */
+      #navPanel {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90%;
+        background: rgba(0, 0, 0, 0.85);
+        color: white;
+        padding: 12px;
+        border-radius: 14px;
+        font-size: 16px;
+        display: none;
+        z-index: 999;
+      }
+
+      #navDirection {
+        font-weight: bold;
+      }
+
+      #navStreet {
+        margin-top: 4px;
+      }
+
+      #navDistance {
+        font-size: 14px;
+        opacity: 0.8;
+        margin-top: 2px;
+      }
     }
   </style>
   <script> function aggiornaScala() {
@@ -221,7 +252,7 @@
 
   <div class="controls">
     <div class="row">
-      <input id="searchInput" type="text" placeholder="Cerca in Sardegna (via, luogo)..." autocomplete="off" />
+      <input id="searchInput" type="text" placeholder="Cerca (via, luogo)..." autocomplete="off" />
       <button id="searchBtn" class="secondary">Cerca</button>
     </div>
 
@@ -237,15 +268,23 @@
       </label>
     </div>
 
-    <button id="installBtn">?? Installa App</button>
+    <button id="installBtn">?&#128241; Installa App</button>
 
     <div id="etaBox">Calcolo percorso...</div>
+  </div>
+
+
+  <div id="navPanel">
+    <div id="navArrow" style="font-size:32px; text-align:center; margin-bottom:4px;">⬆️</div>
+    <div id="navDirection">Prossima manovra</div>
+    <div id="navStreet"></div>
+    <div id="navDistance"></div>
   </div>
 
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.14-tests';
+    const APP_VERSION = '1.0.15';
     document.getElementById('versionLabel').textContent = APP_VERSION;
     console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
 
@@ -300,8 +339,10 @@
       routeSourceId: 'route-src',
       routeLayerId: 'route-lyr',
       routeFeature: null,
-      arrowEnabled: true,      // freccia ON di default
-      lastHeading: null       // ricordo ultimo heading
+      arrowEnabled: true,
+      lastHeading: null,
+      steps: [],
+      currentStep: 0
     };
 
     // --- Stile OpenStreetMap standard ---
@@ -366,6 +407,27 @@
       btn.textContent = app.followMode ? "Segui posizione: ON" : "Segui posizione: OFF";
     }
 
+    function getArrowForManeuver(step) {
+      if (!step || !step.maneuver) return '⬆️';
+      const type = step.maneuver.type;
+      const modifier = step.maneuver.modifier; // destra, sinistra, etc.
+
+      switch (type) {
+        case 'turn':
+          if (modifier === 'right') return '➡️';
+          if (modifier === 'left') return '⬅️';
+          if (modifier === 'uturn') return '↩️';
+          return '⬆️';
+        case 'depart': return '🚦';
+        case 'merge': return '🔀';
+        case 'roundabout': return '🔄';
+        case 'on ramp': return '⤴️';
+        case 'off ramp': return '⤵️';
+        case 'fork': return '🔀';
+        default: return '⬆️';
+      }
+    }
+
 
     // --- Heading helpers ---
     // Offset per allineare l'SVG alla direzione "Nord" del sensore.
@@ -398,21 +460,17 @@
     // helper freccia direzioni
     function setUserMarker(lng, lat) {
       app.startPoint = [lng, lat];
-
       const wantArrow = app.arrowEnabled;
 
       // Se il tipo di marker non combacia con il toggle, ricrealo
       if (!app.userMarker || app.userMarker.__isArrow !== wantArrow) {
         if (app.userMarker) {
           app.userMarker.remove();
-          app.userMarker = null;
         }
 
         if (wantArrow) {
-          // Contenitore della freccia (MapLibre lo trasla, non lo ruotiamo)
           const container = document.createElement('div');
           container.className = 'dir-arrow-container';
-
           const inner = document.createElement('div');
           inner.className = 'dir-arrow'; // rimane sempre a nord
           container.appendChild(inner);
@@ -448,7 +506,7 @@
     app.lastHeading = 0;
 
     // Pulsante "Segui posizione"
-    document.getElementById('followBtn').addEventListener('click', toggleFollow);
+    document.getElementById('followBtn').addEventListener('click', () => { app.followMode = !app.followMode; updateFollowButton(); });
     updateFollowButton(); // inizializza stato pulsante
 
     // Disattiva follow se l’utente muove la mappa manualmente
@@ -469,7 +527,7 @@
           center: app.startPoint,
           zoom: Math.max(app.map.getZoom(), 15),
           bearing: (typeof app.lastHeading === 'number' ? app.lastHeading : app.map.getBearing()),
-          pitch: 45,
+          pitch: 20,
           duration: 800,
           essential: true
         });
@@ -517,23 +575,15 @@
       if (app.watchId) navigator.geolocation.clearWatch(app.watchId);
 
       app.watchId = navigator.geolocation.watchPosition(pos => {
-        const { longitude: lng, latitude: lat, heading } = pos.coords;
+        const { longitude: lng, latitude: lat } = pos.coords;
         app.startPoint = [lng, lat];
+        setUserMarker(lng, lat);
 
         if (typeof heading === 'number') app.lastHeading = heading;
 
         setUserMarker(lng, lat);
 
-        if (app.followMode) {
-          app.map.easeTo({
-            center: app.startPoint,
-            zoom: Math.max(app.map.getZoom(), 15),
-            bearing: (typeof app.lastHeading === 'number' ? app.lastHeading : app.map.getBearing()),
-            pitch: 45,
-            duration: 800,
-            essential: true
-          });
-        }
+        if (app.followMode) app.map.easeTo({ center: app.startPoint, zoom: Math.max(app.map.getZoom(), 15), pitch: 45, duration: 800, essential: true });
 
         const now = Date.now();
         if (app.navigationActive && app.endPoint && now - app.lastRouteUpdate > 4000) {
@@ -547,10 +597,7 @@
       });
     }
 
-    window.addEventListener('load', () => {
-      updateUserPosition(true);
-      startLiveTracking();
-    });
+    window.addEventListener('load', () => { startLiveTracking(); updateFollowButton(); });
     window.addEventListener('beforeunload', () => {
       if (app.watchId) navigator.geolocation.clearWatch(app.watchId);
     });
@@ -675,24 +722,44 @@
         document.getElementById('searchInput').blur();
       }
     });
+
+    function showNextStep(index) {
+      if (!app.steps || !app.steps[index]) {
+        document.getElementById('navPanel').style.display = 'none';
+        return;
+      }
+      const step = app.steps[index];
+      const maneuver = step.maneuver;
+
+      document.getElementById('navPanel').style.display = 'block';
+      document.getElementById('navArrow').textContent = getArrowForManeuver(step);
+      document.getElementById('navDirection').textContent = maneuver.instruction;
+      document.getElementById('navStreet').textContent = step.name || '';
+      document.getElementById('navDistance').textContent = `${Math.round(step.distance)} m`;
+    }
+
     // --- Rotta (OSRM) ---
+    if(app.steps && app.steps[app.currentStep]) {
+      const step = app.steps[app.currentStep];
+      const [stepLng, stepLat] = step.maneuver.location;
+      const dist = turf.distance(turf.point([lng, lat]), turf.point([stepLng, stepLat]), { units: 'meters' });
+
+      if (dist < 20) { // 20 metri alla manovra
+        app.currentStep++;
+        showNextStep(app.currentStep);
+      }err => console.warn(err), { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 };
+    }
+
     function requestRoute(start, end) {
       if (!start || !end) return;
-      const etaBox = document.getElementById('etaBox');
-      etaBox.textContent = 'Calcolo percorso...';
-      etaBox.style.display = 'block';
-
       const url = `https://router.project-osrm.org/route/v1/driving/${start.join(',')};${end.join(',')}?overview=full&geometries=geojson&alternatives=false&steps=true&annotations=duration,distance&continue_straight=true`;
 
       fetch(url)
         .then(res => res.json())
         .then(data => {
-          if (!data.routes || data.routes.length === 0) {
-            updateETA(null);
-            alert('Percorso non trovato.');
-            return;
-          }
+          if (!data.routes || !data.routes.length) return;
           const route = data.routes[0];
+
           app.routeFeature = { type: 'Feature', geometry: route.geometry, properties: {} };
           addOrUpdateRouteSource(app.routeFeature);
 
@@ -700,29 +767,24 @@
             fitRouteBounds(route.geometry.coordinates);
             app.routeFittedOnce = true;
           }
-          updateETA(route.duration);
-        })
-        .catch(err => {
-          console.error('Errore nel calcolo del percorso:', err);
-          updateETA(null);
-          alert('Impossibile calcolare il percorso.');
+
+          app.steps = route.legs[0].steps;
+          app.currentStep = 0;
+          showNextStep(app.currentStep);
         });
     }
 
     function addOrUpdateRouteSource(feature) {
       const src = app.map.getSource(app.routeSourceId);
-      if (src) {
-        src.setData(feature);
-      } else {
-        app.map.addSource(app.routeSourceId, { type: 'geojson', data: feature });
-      }
+      if (src) src.setData(feature);
+      else app.map.addSource(app.routeSourceId, { type: 'geojson', data: feature });
+
       if (!app.map.getLayer(app.routeLayerId)) {
         app.map.addLayer({
           id: app.routeLayerId,
           type: 'line',
           source: app.routeSourceId,
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: { 'line-color': '#0077ff', 'line-width': 5 }
+          layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#0077ff', 'line-width': 5 }
         });
       }
     }
@@ -782,21 +844,10 @@
 
     // --- Event wiring ---
     document.getElementById('goToSearchBtn').addEventListener('click', () => {
-      if (!app.startPoint || !app.endPoint) {
-        alert('Seleziona prima una destinazione.');
-        return;
-      }
-      app.routeFittedOnce = false;
+      if (!app.startPoint || !app.endPoint) { alert('Seleziona prima una destinazione.'); return; }
       app.navigationActive = true;
       requestRoute(app.startPoint, app.endPoint);
-
-
-      // 🔹 Forza segui posizione ON quando parte la navigazione
-      app.followMode = true;
-      updateFollowButton();
-
-      if ('wakeLock' in navigator) attivaWakeLock();
-
+      app.followMode = true; updateFollowButton();
     });
 
     document.getElementById('clearRouteBtn').addEventListener('click', () => {
