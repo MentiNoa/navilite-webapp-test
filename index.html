@@ -164,42 +164,43 @@
 
     /* Marker a freccia (sostituisce il pallino rosso quando attivo) */
     /* La freccia vera e propria: ruotiamo SOLO questo nodo interno */
+    /* Marker a freccia (sostituisce il pallino rosso quando attivo) */
     .dir-arrow {
       width: 100%;
       height: 100%;
       background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="red"><path d="M12 2l7 20-7-5-7 5z"/></svg>') center/contain no-repeat;
       transform: rotate(0deg);
       transform-origin: 50% 50%;
+    }
 
-      /* Pannello navigazione in basso */
-      #navPanel {
-        position: absolute;
-        bottom: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 90%;
-        background: rgba(0, 0, 0, 0.85);
-        color: white;
-        padding: 12px;
-        border-radius: 14px;
-        font-size: 16px;
-        display: none;
-        z-index: 999;
-      }
+    /* Pannello navigazione in basso */
+    #navPanel {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      padding: 12px;
+      border-radius: 14px;
+      font-size: 16px;
+      display: none;
+      z-index: 999;
+    }
 
-      #navDirection {
-        font-weight: bold;
-      }
+    #navDirection {
+      font-weight: bold;
+    }
 
-      #navStreet {
-        margin-top: 4px;
-      }
+    #navStreet {
+      margin-top: 4px;
+    }
 
-      #navDistance {
-        font-size: 14px;
-        opacity: 0.8;
-        margin-top: 2px;
-      }
+    #navDistance {
+      font-size: 14px;
+      opacity: 0.8;
+      margin-top: 2px;
     }
   </style>
   <script> function aggiornaScala() {
@@ -281,12 +282,12 @@
     <div id="navDistance"></div>
   </div>
 
-  <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
+  <div id="firmaVersione">© 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.15';
+    const APP_VERSION = '1.0.17';
     document.getElementById('versionLabel').textContent = APP_VERSION;
-    console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
+    console.log(`NaviLite - versione ${APP_VERSION} - © SM`);
 
     // Script del bottone installa app
     let deferredPrompt;
@@ -534,13 +535,6 @@
       }
     }
 
-    // Aggiorna stato pulsante
-    function updateFollowButton() {
-      const btn = document.getElementById('followBtn');
-      if (!btn) return;
-      btn.textContent = app.followMode ? "Segui posizione: ON" : "Segui posizione: OFF";
-    }
-
     // Aggiorna posizione utente una tantum
     function updateUserPosition(centerMap = true) {
       if (!navigator.geolocation) return;
@@ -575,16 +569,41 @@
       if (app.watchId) navigator.geolocation.clearWatch(app.watchId);
 
       app.watchId = navigator.geolocation.watchPosition(pos => {
-        const { longitude: lng, latitude: lat } = pos.coords;
-        app.startPoint = [lng, lat];
-        setUserMarker(lng, lat);
+        const { longitude: lng, latitude: lat, heading } = pos.coords;
 
+        app.startPoint = [lng, lat];
         if (typeof heading === 'number') app.lastHeading = heading;
 
         setUserMarker(lng, lat);
 
-        if (app.followMode) app.map.easeTo({ center: app.startPoint, zoom: Math.max(app.map.getZoom(), 15), pitch: 45, duration: 800, essential: true });
+        if (app.followMode) {
+          app.map.easeTo({
+            center: app.startPoint,
+            zoom: Math.max(app.map.getZoom(), 15),
+            pitch: 45,
+            duration: 800,
+            essential: true
+          });
+        }
 
+        // Avanza step/manovra quando sei vicino
+        if (app.navigationActive && app.steps.length) {
+          const step = app.steps[app.currentStep];
+          if (step && step.maneuver && step.maneuver.location) {
+            const [stepLng, stepLat] = step.maneuver.location;
+            const distKm = turf.distance(turf.point([lng, lat]), turf.point([stepLng, stepLat]), { units: 'kilometers' });
+            const distM = distKm * 1000;
+
+            document.getElementById('navDistance').textContent = `${Math.round(distM)} m`;
+
+            if (distM < 20 && app.currentStep < app.steps.length - 1) {
+              app.currentStep++;
+              showNextStep(app.currentStep);
+            }
+          }
+        }
+
+        // Ricalcolo rotta periodico
         const now = Date.now();
         if (app.navigationActive && app.endPoint && now - app.lastRouteUpdate > 4000) {
           requestRoute(app.startPoint, app.endPoint);
@@ -596,6 +615,7 @@
         timeout: 10000
       });
     }
+
 
     window.addEventListener('load', () => { startLiveTracking(); updateFollowButton(); });
     window.addEventListener('beforeunload', () => {
@@ -723,6 +743,25 @@
       }
     });
 
+    function formatInstruction(step) {
+      const m = step.maneuver || {};
+      const mod = m.modifier;
+      const type = m.type;
+
+      if (type === 'arrive') return 'Arrivo';
+      if (type === 'depart') return 'Partenza';
+      if (type === 'turn') {
+        if (mod === 'left') return 'Svolta a sinistra';
+        if (mod === 'right') return 'Svolta a destra';
+        if (mod === 'uturn') return 'Inversione a U';
+        return 'Prosegui dritto';
+      }
+      if (type === 'roundabout') return 'Entra nella rotonda';
+      if (type === 'merge' || type === 'fork') return 'Mantieni la direzione';
+      return 'Prosegui';
+    }
+
+
     function showNextStep(index) {
       if (!app.steps || !app.steps[index]) {
         document.getElementById('navPanel').style.display = 'none';
@@ -733,22 +772,13 @@
 
       document.getElementById('navPanel').style.display = 'block';
       document.getElementById('navArrow').textContent = getArrowForManeuver(step);
-      document.getElementById('navDirection').textContent = maneuver.instruction;
+      document.getElementById('navDirection').textContent = formatInstruction(step); // <— qui
       document.getElementById('navStreet').textContent = step.name || '';
-      document.getElementById('navDistance').textContent = `${Math.round(step.distance)} m`;
+      // navDistance aggiornato live nel watchPosition
     }
+
 
     // --- Rotta (OSRM) ---
-    if(app.steps && app.steps[app.currentStep]) {
-      const step = app.steps[app.currentStep];
-      const [stepLng, stepLat] = step.maneuver.location;
-      const dist = turf.distance(turf.point([lng, lat]), turf.point([stepLng, stepLat]), { units: 'meters' });
-
-      if (dist < 20) { // 20 metri alla manovra
-        app.currentStep++;
-        showNextStep(app.currentStep);
-      }err => console.warn(err), { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 };
-    }
 
     function requestRoute(start, end) {
       if (!start || !end) return;
@@ -759,6 +789,8 @@
         .then(data => {
           if (!data.routes || !data.routes.length) return;
           const route = data.routes[0];
+
+          updateETA(route.duration);
 
           app.routeFeature = { type: 'Feature', geometry: route.geometry, properties: {} };
           addOrUpdateRouteSource(app.routeFeature);
@@ -848,6 +880,7 @@
       app.navigationActive = true;
       requestRoute(app.startPoint, app.endPoint);
       app.followMode = true; updateFollowButton();
+      attivaWakeLock(); //schermo attivo in modalità navigazione
     });
 
     document.getElementById('clearRouteBtn').addEventListener('click', () => {
@@ -1064,7 +1097,7 @@
 
   </script>
 
-  <script src="/navilite-webapp/sw-register.js"></script>
+  <script src="/navilite-webapp-test/sw-register.js"></script>
 
 </body>
 
