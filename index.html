@@ -523,8 +523,9 @@
         app.lastHeading = 0;
 
         // Pulsante "Segui posizione"
-        document.getElementById('followBtn').addEventListener('click', () => { app.followMode = !app.followMode; updateFollowButton(); });
+        document.getElementById('followBtn').addEventListener('click', toggleFollow);
         updateFollowButton(); // inizializza stato pulsante
+
 
         // Disattiva follow se l’utente muove la mappa manualmente
         app.map.on('dragstart', () => {
@@ -543,7 +544,7 @@
                 app.map.easeTo({
                     center: app.startPoint,
                     zoom: Math.max(app.map.getZoom(), 15),
-                    bearing: (typeof app.lastHeading === 'number' ? app.lastHeading : app.map.getBearing()),
+                    bearing: getEffectiveHeading(app.lastHeading), // usa la normalizzazione,
                     pitch: 20,
                     duration: 800,
                     essential: true
@@ -582,21 +583,24 @@
         // Live tracking continuo
         function startLiveTracking() {
             if (!navigator.geolocation) return;
+            // cancella eventuale watch precedente
             if (app.watchId) navigator.geolocation.clearWatch(app.watchId);
 
             app.watchId = navigator.geolocation.watchPosition(pos => {
                 const { longitude: lng, latitude: lat, heading } = pos.coords;
 
                 app.startPoint = [lng, lat];
+               // Aggiorna heading se disponibile
                 if (typeof heading === 'number') app.lastHeading = heading;
-
+                // Aggiorna marker utente
                 setUserMarker(lng, lat);
 
                 if (app.followMode) {
                     app.map.easeTo({
                         center: app.startPoint,
                         zoom: Math.max(app.map.getZoom(), 15),
-                        pitch: 45,
+                        bearing: getEffectiveHeading(app.lastHeading), // <--- rotazione mappa
+                        pitch: 20,
                         duration: 800,
                         essential: true
                     });
@@ -632,7 +636,7 @@
             });
         }
 
-
+        // --- Avvio live tracking al load ---
         window.addEventListener('load', () => { startLiveTracking(); updateFollowButton(); });
         window.addEventListener('beforeunload', () => {
             if (app.watchId) navigator.geolocation.clearWatch(app.watchId);

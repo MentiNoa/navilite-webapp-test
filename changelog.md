@@ -7,7 +7,8 @@ Tutte le modifiche rilevanti al progetto saranno documentate qui.
 - banner direzioni
 
 ### Aggiornato
-- fix interfaccia non centrata 
+- fix interfaccia non centrata
+- fix rotazione mappa 
 
 ### Aggiornato
 - logica della freccia: statica ma la mappa ruota 
