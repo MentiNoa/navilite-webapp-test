@@ -461,7 +461,7 @@
           typeof heading === 'number' ? heading : app.lastHeading
         );
         if (effectiveHeading !== null) {
-          app.userMarker.__arrowInner.style.transform = `rotate(${effectiveHeading}deg)`;
+          app.userMarker.__arrowInner.style.transform = `rotate(${effectiveHeading - 90}deg)`;
         }
       }
     }
