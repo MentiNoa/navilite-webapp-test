@@ -8,7 +8,7 @@
   <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/osmtogeojson@3.0.0-beta.5/osmtogeojson.js"></script>
-  <link rel="manifest" href="/navilite-webapp-test/manifest.json">
+  <link id="manifestLink" rel="manifest" href="">
   <meta name="theme-color" content="#0f172a">
   <style>
     :root {
@@ -192,21 +192,28 @@
     window.addEventListener('load', aggiornaScala);
     window.addEventListener('resize', aggiornaScala);
 
-    // Reverse geocoding per rilevare comune
+    // Pre-inizializzazione per evitare ReferenceError se la geo risponde prima del body
+    window.__appPreInit = { currentCoords: null, currentTown: '' };
+
     // Reverse geocoding per rilevare comune e salvare coordinate
     window.addEventListener('load', () => {
       if (!navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(pos => {
         const { longitude: lng, latitude: lat } = pos.coords;
 
-        // Salvo coordinate e comune attuale
-        app.currentCoords = [lng, lat];
+        // Salvo coordinate e comune nel pre-init (app non è ancora definito)
+        window.__appPreInit.currentCoords = [lng, lat];
 
         fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=it`)
           .then(res => res.json())
           .then(data => {
-            app.currentTown = data.address?.town || data.address?.city || data.address?.village || '';
-            console.log('Comune rilevato:', app.currentTown, app.currentCoords);
+            window.__appPreInit.currentTown = data.address?.town || data.address?.city || data.address?.village || '';
+            // Aggiorna app se già definito
+            if (window.app) {
+              app.currentCoords = window.__appPreInit.currentCoords;
+              app.currentTown = window.__appPreInit.currentTown;
+            }
+            console.log('Comune rilevato:', window.__appPreInit.currentTown, window.__appPreInit.currentCoords);
           })
           .catch(err => console.warn('Reverse geocoding fallito:', err));
       }, err => console.warn('Geolocalizzazione fallita:', err), { enableHighAccuracy: true, timeout: 8000 });
@@ -245,9 +252,18 @@
   <div id="firmaVersione"> 2025 - v<span id="versionLabel"></span></div>
 
   <script>
-    const APP_VERSION = '1.0.14-tests';
+    // ─── CONFIGURAZIONE (unica sezione da modificare tra test e produzione) ───
+    const CONFIG = {
+      basePath: '/navilite-webapp-test',  // produzione: '/navilite-webapp'
+      isTest: true,                        // produzione: false
+    };
+
+    const APP_VERSION = CONFIG.isTest ? '1.0.14-test' : '1.0.14';
     document.getElementById('versionLabel').textContent = APP_VERSION;
-    console.log(`NaviLite - versione ${APP_VERSION} - � SM`);
+    console.log(`NaviLite - versione ${APP_VERSION}`);
+
+    // Imposta manifest dinamicamente in base al basePath
+    document.getElementById('manifestLink').href = CONFIG.basePath + '/manifest.json';
 
     // Script del bottone installa app
     let deferredPrompt;
@@ -300,8 +316,11 @@
       routeSourceId: 'route-src',
       routeLayerId: 'route-lyr',
       routeFeature: null,
-      arrowEnabled: true,      // freccia ON di default
-      lastHeading: null       // ricordo ultimo heading
+      arrowEnabled: true,
+      lastHeading: null,
+      // Eredita dati dal pre-init dell'head (fix race condition)
+      currentCoords: window.__appPreInit?.currentCoords ?? null,
+      currentTown:   window.__appPreInit?.currentTown  ?? '',
     };
 
     // --- Stile OpenStreetMap standard ---
@@ -366,7 +385,6 @@
       btn.textContent = app.followMode ? "Segui posizione: ON" : "Segui posizione: OFF";
     }
 
-
     // --- Heading helpers ---
     // Offset per allineare l'SVG alla direzione "Nord" del sensore.
     // Se vedi la freccia ruotata, prova a cambiare in +90, 0 o 180.
@@ -396,7 +414,7 @@
     }
 
     // helper freccia direzioni
-    function setUserMarker(lng, lat) {
+    function setUserMarker(lng, lat, heading) {
       app.startPoint = [lng, lat];
 
       const wantArrow = app.arrowEnabled;
@@ -409,12 +427,11 @@
         }
 
         if (wantArrow) {
-          // Contenitore della freccia (MapLibre lo trasla, non lo ruotiamo)
           const container = document.createElement('div');
           container.className = 'dir-arrow-container';
 
           const inner = document.createElement('div');
-          inner.className = 'dir-arrow'; // rimane sempre a nord
+          inner.className = 'dir-arrow';
           container.appendChild(inner);
 
           app.userMarker = new maplibregl.Marker({ element: container })
@@ -438,7 +455,15 @@
         app.userMarker.setLngLat(app.startPoint);
       }
 
-      // Nota: niente rotazione del nodo interno, la freccia punta sempre a nord
+      // Ruota la freccia se disponibile e heading valido
+      if (app.userMarker.__arrowInner) {
+        const effectiveHeading = getEffectiveHeading(
+          typeof heading === 'number' ? heading : app.lastHeading
+        );
+        if (effectiveHeading !== null) {
+          app.userMarker.__arrowInner.style.transform = `rotate(${effectiveHeading}deg)`;
+        }
+      }
     }
 
 
@@ -476,13 +501,6 @@
       }
     }
 
-    // Aggiorna stato pulsante
-    function updateFollowButton() {
-      const btn = document.getElementById('followBtn');
-      if (!btn) return;
-      btn.textContent = app.followMode ? "Segui posizione: ON" : "Segui posizione: OFF";
-    }
-
     // Aggiorna posizione utente una tantum
     function updateUserPosition(centerMap = true) {
       if (!navigator.geolocation) return;
@@ -493,7 +511,7 @@
 
         if (typeof heading === 'number') app.lastHeading = heading;
 
-        setUserMarker(lng, lat);
+        setUserMarker(lng, lat, heading);
 
         if (centerMap || app.followMode) {
           app.map.easeTo({
@@ -522,7 +540,7 @@
 
         if (typeof heading === 'number') app.lastHeading = heading;
 
-        setUserMarker(lng, lat);
+        setUserMarker(lng, lat, heading);
 
         if (app.followMode) {
           app.map.easeTo({
@@ -580,7 +598,6 @@
     function eseguiRicerca(query, lat, lng) {
       const resultsList = document.getElementById('resultsList');
 
-      // Se ho le coordinate, creo una viewbox di ~10km attorno
       let paramsObj = {
         format: 'json',
         q: query,
@@ -590,11 +607,14 @@
         countrycodes: 'it'
       };
 
-      if (lat && lng) {
+      const hasCoordsArg = (lat !== undefined && lng !== undefined);
+
+      if (hasCoordsArg) {
         const delta = 0.1; // circa 10km
+        // Nominatim viewbox: left,top,right,bottom = min_lng,max_lat,max_lng,min_lat
         paramsObj.viewbox = [
-          lng - delta, lat - delta,
-          lng + delta, lat + delta
+          lng - delta, lat + delta,
+          lng + delta, lat - delta
         ].join(',');
         paramsObj.bounded = 1;
       }
@@ -603,6 +623,18 @@
 
       fetch(`https://nominatim.openstreetmap.org/search?${params}`, { headers: { 'Accept': 'application/json' } })
         .then(res => res.json())
+        .then(results => {
+          // Se bounded non ha trovato nulla, riprova senza bounded
+          if (hasCoordsArg && Array.isArray(results) && results.length === 0) {
+            const fallbackParams = new URLSearchParams({
+              format: 'json', q: query, addressdetails: '1',
+              limit: '20', 'accept-language': 'it', countrycodes: 'it'
+            });
+            return fetch(`https://nominatim.openstreetmap.org/search?${fallbackParams}`, { headers: { 'Accept': 'application/json' } })
+              .then(r => r.json());
+          }
+          return results;
+        })
         .then(results => {
           resultsList.innerHTML = '';
 
@@ -643,15 +675,11 @@
             return { place, item, distMeters };
           });
 
-          // Ordina sempre per distanza
+          // Ordina per distanza
           enriched.sort((a, b) => {
-            if (a.distMeters !== null && b.distMeters !== null) {
-              return a.distMeters - b.distMeters;
-            } else if (a.distMeters !== null) {
-              return -1;
-            } else if (b.distMeters !== null) {
-              return 1;
-            }
+            if (a.distMeters !== null && b.distMeters !== null) return a.distMeters - b.distMeters;
+            else if (a.distMeters !== null) return -1;
+            else if (b.distMeters !== null) return 1;
             return 0;
           });
 
@@ -880,7 +908,7 @@
         .catch(err => console.error('Errore nel caricamento confini Villasor:', err));
     }
 
-    //Aggiungiamo i confini quando la mappa � pronta
+    //Aggiungiamo i confini quando la mappa è pronta
     app.map.on('load', () => {
       addVillasorBorders();
 
@@ -949,7 +977,7 @@
     function setDestinationFromLongPress(coords) {
       // Imposta destinazione
       app.endPoint = coords;
-      app.navigationActive = false; // la rotta partir� solo con "Vai a destinazione"
+      app.navigationActive = false; // la rotta partirà solo con "Vai a destinazione"
       if (app.searchMarker) app.searchMarker.remove();
       app.searchMarker = new maplibregl.Marker({ color: '#00aa00' })
         .setLngLat(app.endPoint)
@@ -1013,7 +1041,12 @@
 
   </script>
 
-  <script src="/navilite-webapp/sw-register.js"></script>
+  <script>
+    // Carica sw-register con il basePath corretto
+    const _swScript = document.createElement('script');
+    _swScript.src = CONFIG.basePath + '/sw-register.js';
+    document.body.appendChild(_swScript);
+  </script>
 
 </body>
 
